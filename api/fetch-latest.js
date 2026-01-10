@@ -1,37 +1,46 @@
-// api/fetch-latest.js - 修订版（直接解析README）
+// api/fetch-latest.js - 最终精简版：原样提取代码块内容
 export default async function handler(request, response) {
   try {
-    console.log('开始从README提取节点...');
+    console.log('正在提取README中的原始代码块内容...');
     
-    // 1. 获取最新的 README 内容
-    const readmeUrl = 'https://raw.githubusercontent.com/free-nodes/v2rayfree/main/README.md';
-    const readmeRes = await fetch(readmeUrl);
+    // 1. 获取README的原始内容
+    const readmeRawUrl = 'https://raw.githubusercontent.com/free-nodes/v2rayfree/main/README.md';
+    const readmeRes = await fetch(readmeRawUrl);
     
     if (!readmeRes.ok) {
-      throw new Error(`获取README失败，状态码: ${readmeRes.status}`);
+      throw new Error(`获取源文件失败: ${readmeRes.status}`);
     }
     
-    const readmeText = await readmeRes.text();
+    const fullText = await readmeRes.text();
     
-    // 2. 使用正则表达式提取所有节点订阅链接
-    // 匹配 ss://, vmess://, vless://, trojan://, hy://, hysteria:// 等常见协议
-    // 链接通常持续到空格、换行或引号前
-    const nodeLinkRegex = /(?:ss|vmess|vless|trojan|hy|hysteria):\/\/[^\s<>"']+/gi;
-    const extractedLinks = readmeText.match(nodeLinkRegex) || [];
+    // 2. 定义代码块标记
+    const delimiter = '```';
     
-    console.log(`从README中提取到 ${extractedLinks.length} 个节点链接`);
-    
-    // 3. 检查是否成功提取到链接
-    if (extractedLinks.length === 0) {
-      return response.status(404).send('未在README中找到有效的节点订阅链接。');
+    // 3. 查找第一个标记的位置
+    const firstIndex = fullText.indexOf(delimiter);
+    if (firstIndex === -1) {
+      return response.status(404).send('错误：在源文件中未找到代码块起始标记。');
     }
     
-    // 4. 将链接转换为纯文本格式（每行一个），这是V2RayN等客户端支持的格式
-    const nodesContent = extractedLinks.join('\n');
+    // 4. 在第一个标记之后，查找第二个标记的位置
+    const textAfterFirst = fullText.substring(firstIndex + delimiter.length);
+    const secondIndex = textAfterFirst.indexOf(delimiter);
+    if (secondIndex === -1) {
+      return response.status(404).send('错误：在源文件中未找到匹配的代码块结束标记。');
+    }
     
-    // 5. 成功返回
+    // 5. 提取两个标记之间的原始内容
+    const nodeListText = textAfterFirst.substring(0, secondIndex).trim();
+    
+    // 6. 按行分割，这将得到一个数组，每一行就是一个节点
+    const nodeLines = nodeListText.split('\n');
+    const extractedCount = nodeLines.length;
+    console.log(`提取完成，共 ${extractedCount} 行。`);
+    
+    // 7. 直接将原始内容以纯文本形式返回
+    // 注意：这里返回的是原样的 nodeListText，它已经是每行一个节点的格式
     response.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    response.status(200).send(nodesContent);
+    response.status(200).send(nodeListText);
     
   } catch (error) {
     console.error('处理请求时发生错误:', error);
