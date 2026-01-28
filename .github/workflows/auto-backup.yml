@@ -14,8 +14,7 @@ jobs:
     steps:
       - name: Call Vercel Backup API
         run: |
-          # 调用你之前写好的、部署在Vercel上的备份接口
-          # 将 <your_cron_secret> 和 <your_vercel_domain> 替换成你的实际信息
           curl -X POST \
+            https://yang-eight-sigma.vercel.app/api/cron-backup \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://<your_vercel_domain>.vercel.app/api/cron-backup
+            -H "Content-Type: application/json"
