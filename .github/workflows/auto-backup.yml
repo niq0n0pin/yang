@@ -1,229 +1,92 @@
-name: Daily Database Backup
+name: Database Backup (使用 Environment Variables)
 
 on:
   schedule:
-    # 每天北京时间 22:00 运行（UTC 14:00）
-    - cron: '0 14 * * *'
-  
-  # 允许手动触发
+    - cron: '0 14 * * *'  # UTC 14:00 (北京时间 22:00)
   workflow_dispatch:
-    inputs:
-      dry-run:
-        description: '仅测试不执行实际备份'
-        required: false
-        default: false
-        type: boolean
+
+# 指定使用哪个环境
+env:
+  ENVIRONMENT: production
 
 jobs:
   backup:
+    # 指定运行环境
+    environment: production
+    
     runs-on: ubuntu-latest
     
     steps:
-      - name: 🔐 验证环境变量
-        id: verify-secrets
+      - name: 🔍 检查 Environment Variables
         run: |
-          echo "=== 环境验证开始 ==="
-          echo "当前时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
-          echo ""
+          echo "=== Environment Variables 状态 ==="
+          echo "运行环境: ${{ vars.ENVIRONMENT || '未设置' }}"
+          echo "CRON_SECRET 是否存在: ${{ vars.CRON_SECRET && '✅ 已设置' || '❌ 未设置' }}"
           
-          # 检查密钥是否存在
-          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
-            echo "❌ 错误: CRON_SECRET 未设置"
-            echo "请到 GitHub 仓库设置:"
-            echo "Settings → Secrets and variables → Actions → New repository secret"
-            echo ""
-            echo "密钥名称: CRON_SECRET"
-            echo "密钥值: (在 Vercel 中设置的相同值)"
-            exit 1
+          if [ -n "${{ vars.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET 长度: ${#CRON_SECRET}"
+            echo "CRON_SECRET 前4位: ${CRON_SECRET:0:4}"
           fi
           
-          # 显示密钥信息（安全地）
-          SECRET="${{ secrets.CRON_SECRET }}"
-          echo "✅ CRON_SECRET 已设置"
-          echo "密钥长度: ${#SECRET} 字符"
-          echo "密钥格式: ${SECRET:0:4}...${SECRET: -4}"
-          echo ""
+          # 列出所有可用的环境变量
+          echo -e "\n📋 可用环境变量:"
+          echo "ENVIRONMENT: $ENVIRONMENT"
+          # 其他环境变量...
           
-          # 验证密钥格式
-          if [[ ! "$SECRET" =~ ^[a-zA-Z0-9]+$ ]]; then
-            echo "⚠️  警告: 密钥包含特殊字符，请确保没有多余空格"
-          fi
-          
-          echo "✅ 环境验证通过"
-          
-        continue-on-error: false
-      
       - name: 📡 发送备份请求
-        id: backup-request
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           API_URL: https://yang-eight-sigma.vercel.app/api/cron-backup
-          IS_DRY_RUN: ${{ github.event.inputs.dry-run }}
+          # 直接使用环境变量（GitHub会自动注入）
         run: |
-          echo "=== 备份请求开始 ==="
-          echo "目标 API: $API_URL"
-          echo "请求时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
-          echo "手动触发: ${{ github.event_name == 'workflow_dispatch' }}"
-          echo "测试模式: $IS_DRY_RUN"
+          echo "=== 发送备份请求 ==="
+          echo "API 地址: $API_URL"
+          echo "Environment: $ENVIRONMENT"
           echo ""
           
-          # 构建请求数据
-          REQUEST_DATA=$(cat <<EOF
-          {
-            "action": "backup",
-            "trigger": {
-              "source": "github-actions",
-              "event": "${{ github.event_name }}",
-              "workflow": "${{ github.workflow }}",
-              "run_id": "${{ github.run_id }}",
-              "dry_run": $IS_DRY_RUN
-            },
-            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          }
-          EOF
-          )
-          
-          echo "请求数据:"
-          echo "$REQUEST_DATA" | jq '.' 2>/dev/null || echo "$REQUEST_DATA"
-          echo ""
-          
-          # 发送请求并捕获响应
-          echo "发送备份请求..."
+          # 构建请求
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X POST \
             "$API_URL" \
-            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Authorization: Bearer ${{ vars.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            -H "User-Agent: GitHub-Actions-Backup/1.0 (${{ github.repository }})" \
+            -H "X-Environment: $ENVIRONMENT" \
             -H "X-GitHub-Run-ID: ${{ github.run_id }}" \
-            -H "X-GitHub-Trigger: ${{ github.event_name }}" \
-            -d "$REQUEST_DATA")
+            -d "{
+              \"action\": \"backup\",
+              \"source\": \"github-actions\",
+              \"environment\": \"$ENVIRONMENT\",
+              \"timestamp\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\",
+              \"run_id\": \"${{ github.run_id }}\"
+            }")
           
-          # 分离响应体和状态码
+          # 解析响应
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
           
-          echo ""
-          echo "=== 响应详情 ==="
           echo "HTTP 状态码: $HTTP_CODE"
           echo "响应内容:"
           echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
           echo ""
           
-          # 保存响应到环境变量供后续步骤使用
-          echo "BACKUP_RESPONSE<<EOF" >> $GITHUB_ENV
-          echo "$RESPONSE_BODY" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          
-          echo "BACKUP_HTTP_CODE=$HTTP_CODE" >> $GITHUB_ENV
-          echo "REQUEST_TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
-          
-          # 如果请求失败，退出
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ 备份请求失败 (状态码: $HTTP_CODE)"
+          # 检查是否成功
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ 备份请求成功"
+          else
+            echo "❌ 备份请求失败"
             exit 1
           fi
           
-          echo "✅ 备份请求发送成功"
-          
-        continue-on-error: false
-      
-      - name: 📊 解析备份结果
-        id: parse-result
-        env:
-          BACKUP_RESPONSE: ${{ env.BACKUP_RESPONSE }}
-        run: |
-          echo "=== 备份结果分析 ==="
-          
-          # 使用 jq 解析 JSON 响应，如果失败则使用 grep
-          if command -v jq &> /dev/null; then
-            echo "使用 jq 解析响应..."
-            STATUS=$(echo "$BACKUP_RESPONSE" | jq -r '.status // "unknown"')
-            MESSAGE=$(echo "$BACKUP_RESPONSE" | jq -r '.message // "No message"')
-            TIMESTAMP=$(echo "$BACKUP_RESPONSE" | jq -r '.timestamp // "unknown"')
-            
-            # 如果有详细信息，提取出来
-            if echo "$BACKUP_RESPONSE" | jq -e '.details' > /dev/null 2>&1; then
-              DETAILS=$(echo "$BACKUP_RESPONSE" | jq -c '.details')
-            else
-              DETAILS="{}"
-            fi
-            
-            # 输出解析结果
-            echo "备份状态: $STATUS"
-            echo "备份消息: $MESSAGE"
-            echo "完成时间: $TIMESTAMP"
-            
-            # 如果有摘要信息，显示
-            if echo "$DETAILS" | jq -e '.summary' > /dev/null 2>&1; then
-              echo ""
-              echo "📋 备份摘要:"
-              echo "$BACKUP_RESPONSE" | jq -r '.details.summary | to_entries[] | "  \(.key): \(.value)"'
-            fi
-            
-          else
-            # 回退到简单解析
-            echo "使用基本解析..."
-            echo "原始响应:"
-            echo "$BACKUP_RESPONSE"
-            
-            # 提取状态（简单方法）
-            if echo "$BACKUP_RESPONSE" | grep -q '"status":"success"'; then
-              STATUS="success"
-            elif echo "$BACKUP_RESPONSE" | grep -q '"status":"error"'; then
-              STATUS="error"
-            else
-              STATUS="unknown"
-            fi
-            
-            echo "备份状态: $STATUS"
-          fi
-          
-          # 保存结果供后续步骤使用
-          echo "BACKUP_STATUS=$STATUS" >> $GITHUB_ENV
-          echo "BACKUP_MESSAGE=$MESSAGE" >> $GITHUB_ENV
-          echo "BACKUP_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
-          
-        continue-on-error: true
-      
-      - name: 📧 发送通知（可选）
+      - name: 📊 生成报告
         if: always()
-        env:
-          BACKUP_STATUS: ${{ env.BACKUP_STATUS || 'unknown' }}
-          BACKUP_HTTP_CODE: ${{ env.BACKUP_HTTP_CODE }}
-          REQUEST_TIMESTAMP: ${{ env.REQUEST_TIMESTAMP }}
         run: |
-          echo "=== 备份执行总结 ==="
-          echo ""
-          echo "📅 执行时间: $REQUEST_TIMESTAMP"
-          echo "🏷️  工作流: ${{ github.workflow }}"
-          echo "🔄 运行 ID: ${{ github.run_id }}"
-          echo "🔧 触发方式: ${{ github.event_name }}"
-          echo ""
-          echo "📊 执行结果:"
-          echo "HTTP 状态码: $BACKUP_HTTP_CODE"
-          echo "备份状态: $BACKUP_STATUS"
-          echo ""
-          
-          if [ "${{ job.status }}" = "success" ] && [ "$BACKUP_STATUS" = "success" ]; then
-            echo "✅ 备份任务执行成功"
-          elif [ "${{ job.status }}" = "success" ] && [ "$BACKUP_STATUS" != "success" ]; then
-            echo "⚠️  请求发送成功，但备份状态未知"
-          else
-            echo "❌ 备份任务执行失败"
-          fi
-          
+          echo "=== 备份任务报告 ==="
+          echo "执行时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+          echo "工作流: ${{ github.workflow }}"
+          echo "运行ID: ${{ github.run_id }}"
+          echo "触发方式: ${{ github.event_name }}"
+          echo "使用环境: $ENVIRONMENT"
+          echo "执行结果: ${{ job.status }}"
           echo ""
           echo "🔗 相关链接:"
-          echo "GitHub Actions 运行: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "Vercel 项目: https://vercel.com/niq0n0pins-projects/yang-eight-sigma"
-          
-      - name: 🏁 完成备份任务
-        if: always()
-        run: |
-          echo ""
-          echo "🎉 备份工作流执行完成"
-          echo "运行时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
-          echo "运行时长: ${{ job.status }}"
-          echo ""
-          echo "下次自动执行: 每天 UTC 14:00 (北京时间 22:00)"
+          echo "- GitHub Actions: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "- Vercel 项目: https://vercel.com/niq0n0pins-projects/yang-eight-sigma"
