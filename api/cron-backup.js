@@ -3,10 +3,10 @@ const { getNodeContent } = require('./fetch-latest.js');
 const { getTrackerContent } = require('./merged-trackers.js'); // 确保这个函数也已用同样方式导出
 
 async function handler(req, res) {
-  // 授权验证
-  //if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-  //  return res.status(401).json({ error: 'Unauthorized' });
-  //}
+   授权验证
+  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   console.log('🚀 备份任务开始 (增强诊断模式)');
   const results = [];
