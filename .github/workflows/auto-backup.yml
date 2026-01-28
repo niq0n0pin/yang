@@ -1,0 +1,21 @@
+name: Auto Backup Nodes and Trackers
+
+on:
+  schedule:
+    # 指定 cron 表达式，UTC 时间。下面是从 00:15 开始，每4小时运行一次。
+    - cron: '15 */4 * * *'
+  # 可选：允许手动触发此工作流（在GitHub仓库页面的Actions标签页中点击按钮运行）
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest # 使用GitHub提供的Linux虚拟机[citation:9]
+
+    steps:
+      - name: Call Vercel Backup API
+        run: |
+          # 调用你之前写好的、部署在Vercel上的备份接口
+          # 将 <your_cron_secret> 和 <your_vercel_domain> 替换成你的实际信息
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+              https://yang-eight-sigma.vercel.app/api/cron-backup
