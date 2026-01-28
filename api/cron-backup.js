@@ -13,7 +13,7 @@ async function handler(req, res) {
   // === 请务必检查并修改以下三个变量 ===
   const ghToken = process.env.GH_BACKUP_TOKEN; // 环境变量中的GitHub Token
   const repoOwner = 'niq0n0pin'; // 例如：niqOnOpin
-  const repoName = 'yang'; 
+  const repoName = 'v2rayfree-nice-tracker'; 
   const targetDir = 'backup';    // 在仓库内创建的子目录
   // === 配置结束 ===
 
