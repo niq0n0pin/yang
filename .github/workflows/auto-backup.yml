@@ -14,7 +14,4 @@ jobs:
     steps:
       - name: Trigger Backup
         run: |
-          curl -X POST https://yang-eight-sigma.vercel.app/api/cron-backup \
-            -H "Authorization: Bearer ${{ secrets.CRON_TOKEN }}" \
-            -H "Content-Type: application/json"
-            
+          curl -s "https://your-app.vercel.app/api/cron-backup?token=${{ secrets.CRON_TOKEN }}"
