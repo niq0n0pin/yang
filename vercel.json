@@ -23,11 +23,5 @@
       "source": "/trackers",
       "destination": "/api/merged-trackers"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron-backup",
-      "schedule": "15 */4 * * *"
-    }
   ]
 }
