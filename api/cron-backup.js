@@ -1,12 +1,25 @@
-// api/cron-backup.js - 增强GitHub API错误诊断版
-const { getNodeContent } = require('./fetch-latest.js');
-const { getTrackerContent } = require('./merged-trackers.js'); // 确保这个函数也已用同样方式导出
-
 async function handler(req, res) {
+  console.log('=== 备份接口被调用 ===');
+  console.log('请求路径:', req.url);
+  console.log('请求方法:', req.method);
+  console.log('请求头:', JSON.stringify(req.headers, null, 2));
+  console.log('CRON_SECRET 是否存在:', !!process.env.CRON_SECRET);
+  console.log('CRON_SECRET 长度:', process.env.CRON_SECRET?.length);
+  
+  // 检查 Authorization 头是否存在
+  if (!req.headers.authorization) {
+    console.log('❌ 缺少 Authorization 头');
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
+  
+  console.log('收到的 Authorization:', req.headers.authorization);
+  console.log('期望的 Authorization:', `Bearer ${process.env.CRON_SECRET}`);
+  
   if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    console.log('❌ Authorization 不匹配');
     return res.status(401).json({ error: 'Unauthorized' });
   }
-
+  console.log('✅ 验证通过！开始备份...');
   console.log('🚀 备份任务开始 (增强诊断模式)');
   const results = [];
   // === 请务必检查并修改以下三个变量 ===
