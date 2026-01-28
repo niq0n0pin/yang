@@ -52,5 +52,7 @@ async function handler(request, response) {
 }
 
 // 关键：使用 module.exports 同时暴露默认函数和命名函数
-module.exports = handler;          // 作为默认导出，供 Vercel 调用
-module.exports.getNodeContent = getNodeContent; // 作为命名导出，供 cron-backup.js 调用
+module.exports = {
+  handler: handler,         // 供Vercel调用的默认函数
+  getNodeContent: getNodeContent // 供其他模块调用的函数
+};
