@@ -1,3 +1,5 @@
+节点每4小时更新，tracker也是
+
 一.对于v2rayfree-nice介绍
 
 知道v2rayfree
